@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lift Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#1D2733">
+<meta name="description" content="Log your gym sets, track personal bests, export to Excel.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="xlsx.full.min.js" defer></script>
+<style>
+:root{
+  --bg:#E6E9EC; --surface:#F7F8F9; --ink:#1D2733; --muted:#5D6975; --line:#C9CFD5;
+  --red:#C8312B; --blue:#2457A6; --yellow:#E2B523; --green:#2E8B57; --plate-white:#FBFBF8; --steel:#9AA4AE;
+  --bar:#7C8792; --focus:#2457A6;
+  --display:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;
+  --body:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#151A21; --surface:#1F262F; --ink:#E7EBF0; --muted:#9BA6B2; --line:#323C47;
+    --plate-white:#E9ECEF; --steel:#7F8A95; --bar:#A5AFB9; --focus:#7DA6E8; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151A21; --surface:#1F262F; --ink:#E7EBF0; --muted:#9BA6B2; --line:#323C47;
+  --plate-white:#E9ECEF; --steel:#7F8A95; --bar:#A5AFB9; --focus:#7DA6E8; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:1rem;line-height:1.5}
+main{max-width:44rem;margin:0 auto;padding:1.5rem 1rem 4rem}
+h1,h2,h3{font-family:var(--display);font-weight:800;line-height:1.05;margin:0}
+h1{font-size:clamp(2.6rem,9vw,3.6rem);letter-spacing:-.01em}
+h2{font-size:1.6rem}
+h3{font-size:1.3rem;font-weight:600}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.date{color:var(--muted);margin:.25rem 0 0}
+.units{display:inline-flex;border:2px solid var(--ink);border-radius:999px;overflow:hidden}
+.units button{border:0;background:transparent;color:var(--ink);font:600 .95rem var(--body);padding:.35rem .9rem;cursor:pointer}
+.units button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+nav{display:flex;gap:1.5rem;margin:1.5rem 0 1rem;border-bottom:2px solid var(--line)}
+nav button{background:none;border:0;color:var(--muted);font:600 1.35rem var(--display);padding:.4rem 0;margin-bottom:-2px;border-bottom:4px solid transparent;cursor:pointer}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--red)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+/* Barbell: the one bold moment */
+.rack{background:var(--surface);border-radius:14px;padding:1rem 1rem .75rem;margin-bottom:1rem}
+.rack svg{display:block;width:100%;height:auto}
+.load{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.load strong{font:800 2.4rem var(--display)}
+.load span{color:var(--muted)}
+
+form.log{display:grid;grid-template-columns:2fr 1fr 1fr;gap:.75rem;align-items:end}
+label{display:block;font-weight:600;font-size:.9rem;margin-bottom:.25rem}
+input{width:100%;font:500 1.1rem var(--body);color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:8px;padding:.55rem .65rem}
+.actions{grid-column:1/-1;display:flex;gap:.75rem;flex-wrap:wrap}
+.btn{font:800 1.2rem var(--display);letter-spacing:.02em;border-radius:8px;padding:.6rem 1.3rem;cursor:pointer;border:2px solid var(--ink);background:var(--ink);color:var(--bg)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.err{color:var(--red);font-weight:600;min-height:1.5em;margin:.4rem 0 0}
+
+.group{margin-top:1.5rem}
+.group h3{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.group h3 small{font:500 .9rem var(--body);color:var(--muted)}
+ol.sets{list-style:none;margin:0;padding:0}
+ol.sets li{display:grid;grid-template-columns:3.5rem 1fr auto;align-items:center;padding:.45rem 0;border-bottom:1px dashed var(--line)}
+.setno{color:var(--muted);font-size:.9rem}
+.setval{font:600 1.25rem var(--display)}
+.pr{display:inline-block;margin-left:.5rem;background:var(--yellow);color:#1D2733;font:600 .75rem var(--body);padding:.05rem .45rem;border-radius:4px;vertical-align:middle}
+.del{background:none;border:0;color:var(--muted);font-size:1.3rem;cursor:pointer;padding:.2rem .5rem;border-radius:6px}
+.del:hover{color:var(--red)}
+.empty{color:var(--muted);background:var(--surface);border-radius:12px;padding:1.25rem;margin-top:1.5rem}
+.summary{display:flex;gap:2rem;margin-top:1.5rem;flex-wrap:wrap}
+.summary div{font:800 1.8rem var(--display)}
+.summary span{display:block;font:500 .85rem var(--body);color:var(--muted)}
+
+.day{background:var(--surface);border-radius:12px;padding:1rem;margin-bottom:.75rem}
+.day h3{margin-bottom:.4rem}
+.day p{margin:.15rem 0;color:var(--muted)}
+.day p b{color:var(--ink);font-weight:600}
+table{width:100%;border-collapse:collapse}
+.tablewrap{overflow-x:auto}
+th,td{text-align:left;padding:.55rem .5rem;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 .9rem var(--body);color:var(--muted)}
+td.big{font:600 1.2rem var(--display)}
+.status{color:var(--muted);font-size:.85rem;margin-top:.75rem}
+.export{margin-top:2.5rem;padding-top:1.25rem;border-top:2px solid var(--line);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.export p{margin:0;color:var(--muted);font-size:.9rem;flex:1 1 14rem}
+@media (max-width:520px){form.log{grid-template-columns:1fr 1fr}form.log .ex{grid-column:1/-1}}
+@media (prefers-reduced-motion:no-preference){.plate{transition:transform .25s ease-out}}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>Lift Log</h1>
+      <p class="date" id="today"></p>
+    </div>
+    <div class="units" role="group" aria-label="Weight unit">
+      <button type="button" data-unit="kg">kg</button>
+      <button type="button" data-unit="lb">lb</button>
+    </div>
+  </div>
+
+  <nav role="tablist">
+    <button role="tab" data-view="today" aria-selected="true">Today</button>
+    <button role="tab" data-view="history" aria-selected="false">History</button>
+    <button role="tab" data-view="bests" aria-selected="false">Personal bests</button>
+  </nav>
+
+  <section id="view-today">
+    <div class="rack">
+      <svg id="bar" viewBox="0 0 600 150" role="img" aria-label="Barbell loaded with plates"></svg>
+      <div class="load"><strong id="loadTotal">—</strong><span id="loadPlates">Type a weight to load the bar</span></div>
+    </div>
+    <form class="log" id="logForm" autocomplete="off">
+      <div class="ex">
+        <label for="ex">Exercise</label>
+        <input id="ex" list="exList" placeholder="e.g. Bench press" required maxlength="40">
+        <datalist id="exList"></datalist>
+      </div>
+      <div>
+        <label for="w">Weight (<span class="u">kg</span>)</label>
+        <input id="w" type="number" inputmode="decimal" min="0" step="0.5" placeholder="60" required>
+      </div>
+      <div>
+        <label for="r">Reps</label>
+        <input id="r" type="number" inputmode="numeric" min="1" step="1" placeholder="8" required>
+      </div>
+      <div class="actions">
+        <button class="btn" type="submit">Add set</button>
+        <button class="btn ghost" type="button" id="again" disabled>Same again</button>
+      </div>
+    </form>
+    <p class="err" id="err" role="alert"></p>
+    <div id="todaySets"></div>
+  </section>
+
+  <section id="view-history" hidden></section>
+  <section id="view-bests" hidden></section>
+
+  <div class="export">
+    <button class="btn ghost" type="button" id="exportBtn">Export to Excel</button>
+    <p id="exportMsg">Downloads every set, a daily summary and your personal bests as an .xlsx file.</p>
+  </div>
+  <p class="status" id="status">Loading your log…</p>
+</main>
+
+<script>
+(function(){
+  const COMMON = ["Bench press","Squat","Deadlift","Overhead press","Barbell row","Pull-up","Lat pulldown","Romanian deadlift","Incline dumbbell press","Leg press","Bicep curl","Tricep pushdown","Lunge","Hip thrust"];
+  const PLATES = {
+    kg:{bar:20, list:[[25,"--red",1],[20,"--blue",1],[15,"--yellow",.9],[10,"--green",.8],[5,"--plate-white",.6],[2.5,"--red",.48],[1.25,"--steel",.4]]},
+    lb:{bar:45, list:[[45,"--blue",1],[35,"--yellow",.9],[25,"--green",.8],[10,"--plate-white",.6],[5,"--red",.48],[2.5,"--steel",.4]]}
+  };
+  const KG_PER_LB = 0.45359237;
+
+  let days = {};        // key -> {date, sets:[{id,ex,w,r,unit,t}]}
+  let unit = "kg";
+
+  const $ = id => document.getElementById(id);
+  const todayKey = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+  const fmtDate = key => { const [y,m,d]=key.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}); };
+  const conv = (w,from) => from===unit ? w : (unit==="kg" ? w*KG_PER_LB : w/KG_PER_LB);
+  const nice = n => (Math.round(n*10)/10).toString();
+  const e1rm = (w,r) => r===1 ? w : w*(1+r/30);
+  const uid = () => Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+  const el = (tag, attrs={}, ...kids) => { const n=document.createElement(tag); for(const [k,v] of Object.entries(attrs)){ if(k==="class") n.className=v; else if(k==="text") n.textContent=v; else n.setAttribute(k,v);} kids.forEach(c=>c&&n.append(c)); return n; };
+
+  /* ---------- storage ---------- */
+  function loadLocal(){
+    try{ const raw=localStorage.getItem("liftlog"); if(raw){ const s=JSON.parse(raw); days=s.days||{}; unit=s.unit||"kg"; } }catch(e){}
+  }
+  function saveLocal(){
+    try{ localStorage.setItem("liftlog", JSON.stringify({days,unit})); }
+    catch(e){ $("err").textContent="Couldn’t save to this device. Your phone may be out of storage."; }
+  }
+
+  function persistDay(key){
+    saveLocal();
+  }
+  function persistPrefs(){
+    saveLocal();
+  }
+
+  function useLocal(){
+    loadLocal();
+    $("status").textContent = "Your log is stored only on this device. Export to Excel now and then as a backup.";
+    renderAll();
+  }
+
+  /* ---------- Excel export ---------- */
+  function buildWorkbook(){
+    const sets=[["Date","Exercise","Set","Weight","Unit","Reps","Volume"]];
+    const summary=[["Date","Exercises","Sets","Total reps","Volume ("+unit+")"]];
+    Object.keys(days).sort().forEach(k=>{
+      const counts={}; let reps=0, vol=0;
+      days[k].sets.forEach(s=>{
+        const key=s.ex.toLowerCase(); counts[key]=(counts[key]||0)+1;
+        const w=Math.round(conv(s.w,s.unit)*10)/10;
+        sets.push([k,s.ex,counts[key],w,unit,s.r,Math.round(w*s.r)]);
+        reps+=s.r; vol+=w*s.r;
+      });
+      summary.push([k,Object.keys(counts).length,days[k].sets.length,reps,Math.round(vol)]);
+    });
+    const pbs=[["Exercise","Heaviest weight","Reps at that weight","Estimated 1-rep max","Date","Total sets logged","Unit"]];
+    bests().forEach(b=>pbs.push([b.ex,Math.round(b.top*10)/10,b.topReps,Math.round(b.est*10)/10,b.topDay,b.count,unit]));
+    const wb=XLSX.utils.book_new();
+    const add=(rows,name,widths)=>{ const ws=XLSX.utils.aoa_to_sheet(rows); ws["!cols"]=widths.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,ws,name); };
+    add(sets,"All sets",[12,24,6,9,6,6,9]);
+    add(summary,"Daily summary",[12,10,6,10,12]);
+    add(pbs,"Personal bests",[24,15,18,19,12,16,6]);
+    return XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  }
+  async function exportExcel(){
+    const msg=$("exportMsg");
+    if(!Object.keys(days).length){ msg.textContent="Log at least one set before exporting."; return; }
+    if(typeof XLSX==="undefined"){ msg.textContent="The Excel tool didn’t load. Reload the app and try again."; return; }
+    const data=buildWorkbook(), filename="lift-log-"+todayKey()+".xlsx";
+    const url=URL.createObjectURL(new Blob([data],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    const a=el("a",{href:url,download:filename}); document.body.append(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    msg.textContent="Exported "+filename+". Look in your Downloads folder.";
+  }
+
+  /* ---------- barbell ---------- */
+  function drawBar(total){
+    const svg = $("bar"); const cfg = PLATES[unit];
+    const css = getComputedStyle(document.documentElement);
+    const col = v => css.getPropertyValue(v).trim();
+    let perSide = (total - cfg.bar)/2; const loaded=[];
+    if(perSide>0){ for(const [w,c,h] of cfg.list){ while(perSide >= w-1e-9){ loaded.push([w,c,h]); perSide-=w; } } }
+    let s = `<rect x="20" y="69" width="560" height="12" rx="4" fill="${col("--bar")}"/>`+
+            `<rect x="128" y="62" width="10" height="26" rx="2" fill="${col("--bar")}"/><rect x="462" y="62" width="10" height="26" rx="2" fill="${col("--bar")}"/>`;
+    const widthOf = w => Math.max(9, Math.min(24, 8 + w*0.65));
+    let xr = 474, xl = 126;
+    loaded.forEach(([w,c,h])=>{
+      const pw = widthOf(unit==="lb"? w*KG_PER_LB : w), ph = 130*h, y = 75-ph/2;
+      const fill = col(c), stroke = c==="--plate-white" ? col("--line") : "none";
+      s += `<rect class="plate" x="${xr}" y="${y}" width="${pw}" height="${ph}" rx="3" fill="${fill}" stroke="${stroke}"/>`;
+      s += `<rect class="plate" x="${xl-pw}" y="${y}" width="${pw}" height="${ph}" rx="3" fill="${fill}" stroke="${stroke}"/>`;
+      xr += pw+2; xl -= pw+2;
+    });
+    if(loaded.length){ s += `<rect x="${xr}" y="63" width="8" height="24" rx="2" fill="${col("--muted")}"/><rect x="${xl-8}" y="63" width="8" height="24" rx="2" fill="${col("--muted")}"/>`; }
+    svg.innerHTML = s;
+    const tot=$("loadTotal"), info=$("loadPlates");
+    if(!total){ tot.textContent="—"; info.textContent="Type a weight to load the bar"; return; }
+    tot.textContent = nice(total)+" "+unit;
+    if(total < cfg.bar) info.textContent = `Lighter than the ${cfg.bar} ${unit} bar. Dumbbells or a machine?`;
+    else if(!loaded.length) info.textContent = `Just the empty ${cfg.bar} ${unit} bar`;
+    else info.textContent = "Each side: "+loaded.map(p=>nice(p[0])).join(" + ")+(perSide>0.01?` (plus ${nice(perSide)} ${unit} that plates can’t make)`:"");
+    svg.setAttribute("aria-label", `${nice(total)} ${unit} on the bar. ${info.textContent}`);
+  }
+
+  /* ---------- derived ---------- */
+  function allSets(){ const out=[]; Object.keys(days).sort().forEach(k=>days[k].sets.forEach(s=>out.push({...s,day:k}))); return out; }
+  function bests(){
+    const b={};
+    allSets().forEach(s=>{
+      const w=conv(s.w,s.unit), key=s.ex.toLowerCase();
+      const cur=b[key]||(b[key]={ex:s.ex,top:0,topReps:0,topDay:"",est:0,count:0});
+      cur.count++;
+      if(w>cur.top || (w===cur.top && s.r>cur.topReps)){ cur.top=w; cur.topReps=s.r; cur.topDay=s.day; }
+      cur.est=Math.max(cur.est,e1rm(w,s.r));
+    });
+    return Object.values(b).sort((a,c)=>c.count-a.count);
+  }
+  function isPR(set, key){
+    // heaviest weight for this exercise across all days strictly before or equal to this set
+    const k=set.ex.toLowerCase(), w=conv(set.w,set.unit);
+    for(const s of allSets()){ if(s.id===set.id) continue; if(s.ex.toLowerCase()!==k) continue;
+      const sw=conv(s.w,s.unit);
+      const earlier = s.day<key || (s.day===key && s.t<set.t);
+      if(earlier && sw>=w) return false; }
+    return w>0 && allSets().some(s=>s.ex.toLowerCase()===k && (s.day<key));
+  }
+
+  /* ---------- render ---------- */
+  function renderUnits(){
+    document.querySelectorAll(".units button").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.unit===unit)));
+    document.querySelectorAll(".u").forEach(n=>n.textContent=unit);
+    $("w").step = unit==="kg" ? "0.5" : "1";
+  }
+  function renderDatalist(){
+    const names=[...new Set([...allSets().map(s=>s.ex), ...COMMON])];
+    const dl=$("exList"); dl.replaceChildren(...names.map(n=>el("option",{value:n})));
+  }
+  function renderToday(){
+    const key=todayKey(), day=days[key], box=$("todaySets");
+    box.replaceChildren();
+    $("again").disabled = !(day && day.sets.length);
+    if(!day || !day.sets.length){
+      box.append(el("p",{class:"empty",text:"No sets yet today. Pick an exercise, enter the weight and reps, then add your first set."}));
+      return;
+    }
+    const groups=[];
+    day.sets.forEach(s=>{ let g=groups.find(g=>g.ex.toLowerCase()===s.ex.toLowerCase()); if(!g){g={ex:s.ex,sets:[]};groups.push(g);} g.sets.push(s); });
+    let vol=0;
+    groups.forEach(g=>{
+      const ol=el("ol",{class:"sets"});
+      g.sets.forEach((s,i)=>{
+        vol+=conv(s.w,s.unit)*s.r;
+        const val=el("span",{class:"setval",text:`${nice(conv(s.w,s.unit))} ${unit} × ${s.r}`});
+        if(isPR(s,key)) val.append(el("span",{class:"pr",text:"New best"}));
+        const del=el("button",{class:"del",type:"button","aria-label":`Delete set ${i+1} of ${g.ex}`,text:"×"});
+        del.onclick=()=>{ day.sets=day.sets.filter(x=>x.id!==s.id); if(!day.sets.length) delete days[key]; persistDay(key); renderAll(); };
+        ol.append(el("li",{}, el("span",{class:"setno",text:`Set ${i+1}`}), val, del));
+      });
+      box.append(el("div",{class:"group"}, el("h3",{}, document.createTextNode(g.ex), el("small",{text:`${g.sets.length} ${g.sets.length===1?"set":"sets"}`})), ol));
+    });
+    const sum=el("div",{class:"summary"});
+    [[groups.length,groups.length===1?"exercise":"exercises"],[day.sets.length,"total sets"],[Math.round(vol).toLocaleString()+" "+unit,"volume lifted"]]
+      .forEach(([v,l])=>sum.append(el("div",{}, document.createTextNode(v), el("span",{text:l}))));
+    box.append(sum);
+  }
+  function renderHistory(){
+    const v=$("view-history"); v.replaceChildren();
+    const keys=Object.keys(days).filter(k=>days[k].sets.length).sort().reverse();
+    if(!keys.length){ v.append(el("p",{class:"empty",text:"Your past workouts will show up here once you’ve logged some sets."})); return; }
+    keys.forEach(k=>{
+      const card=el("div",{class:"day"}, el("h3",{text:k===todayKey()?"Today":fmtDate(k)}));
+      const by={};
+      days[k].sets.forEach(s=>{ const g=by[s.ex.toLowerCase()]||(by[s.ex.toLowerCase()]={ex:s.ex,n:0,top:0,reps:0}); g.n++; const w=conv(s.w,s.unit); if(w>g.top){g.top=w;g.reps=s.r;} });
+      Object.values(by).forEach(g=>card.append(el("p",{}, el("b",{text:g.ex}), document.createTextNode(`: ${g.n} ${g.n===1?"set":"sets"}, top ${nice(g.top)} ${unit} × ${g.reps}`))));
+      v.append(card);
+    });
+  }
+  function renderBests(){
+    const v=$("view-bests"); v.replaceChildren();
+    const list=bests();
+    if(!list.length){ v.append(el("p",{class:"empty",text:"Log a few sets and your heaviest lifts will be tracked here."})); return; }
+    const t=el("table",{}, el("thead",{}, el("tr",{}, el("th",{text:"Exercise"}), el("th",{text:"Heaviest set"}), el("th",{text:"Estimated 1-rep max"}), el("th",{text:"When"}))));
+    const tb=el("tbody");
+    list.forEach(b=>tb.append(el("tr",{}, el("td",{text:b.ex}), el("td",{class:"big",text:`${nice(b.top)} ${unit} × ${b.topReps}`}), el("td",{text:`${nice(b.est)} ${unit}`}), el("td",{text:b.topDay===todayKey()?"Today":fmtDate(b.topDay)}))));
+    t.append(tb);
+    v.append(el("div",{class:"tablewrap"},t), el("p",{class:"date",text:"Estimated 1-rep max uses the Epley formula: weight × (1 + reps ÷ 30). It’s a rough guide, not a target."}));
+  }
+  function renderAll(){
+    renderUnits(); renderDatalist(); renderToday(); renderHistory(); renderBests();
+    drawBar(parseFloat($("w").value)||0);
+  }
+
+  /* ---------- events ---------- */
+  $("today").textContent = fmtDate(todayKey());
+  $("w").addEventListener("input", ()=>drawBar(parseFloat($("w").value)||0));
+  $("ex").addEventListener("change", ()=>{
+    // prefill with the last weight used for this exercise
+    const k=$("ex").value.trim().toLowerCase(); const prev=allSets().filter(s=>s.ex.toLowerCase()===k).pop();
+    if(prev && !$("w").value){ $("w").value=nice(conv(prev.w,prev.unit)); $("r").value=prev.r; drawBar(parseFloat($("w").value)); }
+  });
+  function addSet(ex,w,r){
+    const key=todayKey();
+    if(!days[key]) days[key]={date:key,sets:[]};
+    days[key].sets.push({id:uid(),ex,w,r,unit,t:Date.now()});
+    persistDay(key); renderAll();
+  }
+  $("logForm").addEventListener("submit", e=>{
+    e.preventDefault();
+    const ex=$("ex").value.trim(), w=parseFloat($("w").value), r=parseInt($("r").value,10);
+    $("err").textContent="";
+    if(!ex){ $("err").textContent="Enter an exercise name."; return; }
+    if(!(w>=0)){ $("err").textContent="Enter a weight of 0 or more (use 0 for bodyweight)."; return; }
+    if(!(r>=1)){ $("err").textContent="Enter at least 1 rep."; return; }
+    addSet(ex,w,r);
+    $("r").focus();
+  });
+  $("again").addEventListener("click", ()=>{
+    const day=days[todayKey()]; if(!day||!day.sets.length) return;
+    const last=day.sets[day.sets.length-1];
+    addSet(last.ex, Math.round(conv(last.w,last.unit)*10)/10, last.r);
+  });
+  document.querySelectorAll(".units button").forEach(b=>b.addEventListener("click", ()=>{
+    if(unit===b.dataset.unit) return;
+    const w=parseFloat($("w").value);
+    const old=unit; unit=b.dataset.unit;
+    if(w) $("w").value = nice(old==="kg" ? w/KG_PER_LB : w*KG_PER_LB);
+    persistPrefs(); renderAll();
+  }));
+  document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click", ()=>{
+    document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected", String(x===b)));
+    ["today","history","bests"].forEach(v=>$("view-"+v).hidden = v!==b.dataset.view);
+  }));
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", ()=>drawBar(parseFloat($("w").value)||0));
+
+  $("exportBtn").addEventListener("click", exportExcel);
+  useLocal();
+  // Ask the browser not to clear our data when the phone is low on space
+  if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+  // Offline support
+  if("serviceWorker" in navigator) window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+  // A new day starts while the app stays open
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden){ $("today").textContent=fmtDate(todayKey()); renderAll(); } });
+})();
+</script>
+</body>
+</html>
