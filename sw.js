@@ -1,5 +1,5 @@
 // Lift Log offline support. Bump VERSION whenever you change any app file.
-const VERSION = "liftlog-v1";
+const VERSION = "liftlog-v3";
 const APP_FILES = ["./", "index.html", "manifest.webmanifest", "xlsx.full.min.js",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
 

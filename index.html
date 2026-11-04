@@ -67,6 +67,12 @@ input{width:100%;font:500 1.1rem var(--body);color:var(--ink);background:var(--s
 .btn{font:800 1.2rem var(--display);letter-spacing:.02em;border-radius:8px;padding:.6rem 1.3rem;cursor:pointer;border:2px solid var(--ink);background:var(--ink);color:var(--bg)}
 .btn.ghost{background:transparent;color:var(--ink)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
+.lasttime{margin:.9rem 0 0;padding:.75rem .9rem;background:var(--surface);border-left:4px solid var(--blue);border-radius:0 8px 8px 0}
+.lasttime p{margin:0 0 .4rem;color:var(--muted);font-size:.9rem}
+.lasttime p b{color:var(--ink);font-weight:600}
+.lasttime ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.4rem}
+.lasttime button{font:600 1.1rem var(--display);color:var(--ink);background:transparent;border:1.5px solid var(--line);border-radius:6px;padding:.1rem .6rem;cursor:pointer}
+.lasttime button:hover{border-color:var(--ink)}
 .err{color:var(--red);font-weight:600;min-height:1.5em;margin:.4rem 0 0}
 
 .group{margin-top:1.5rem}
@@ -86,8 +92,13 @@ ol.sets li{display:grid;grid-template-columns:3.5rem 1fr auto;align-items:center
 
 .day{background:var(--surface);border-radius:12px;padding:1rem;margin-bottom:.75rem}
 .day h3{margin-bottom:.4rem}
-.day p{margin:.15rem 0;color:var(--muted)}
-.day p b{color:var(--ink);font-weight:600}
+.hx{padding:.5rem 0;border-top:1px dashed var(--line)}
+.hx:first-of-type{border-top:0}
+.hx-name{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;font-weight:600}
+.hx-name small{color:var(--muted);font-weight:500;font-size:.85rem}
+.hx ol{list-style:none;margin:.35rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.4rem}
+.hx li{font:600 1.1rem var(--display);border:1.5px solid var(--line);border-radius:6px;padding:.1rem .55rem}
+.hx li.top{border-color:var(--ink)}
 table{width:100%;border-collapse:collapse}
 .tablewrap{overflow-x:auto}
 th,td{text-align:left;padding:.55rem .5rem;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -143,6 +154,7 @@ td.big{font:600 1.2rem var(--display)}
         <button class="btn ghost" type="button" id="again" disabled>Same again</button>
       </div>
     </form>
+    <div class="lasttime" id="lastTime" hidden></div>
     <p class="err" id="err" role="alert"></p>
     <div id="todaySets"></div>
   </section>
@@ -330,9 +342,20 @@ td.big{font:600 1.2rem var(--display)}
     if(!keys.length){ v.append(el("p",{class:"empty",text:"Your past workouts will show up here once you’ve logged some sets."})); return; }
     keys.forEach(k=>{
       const card=el("div",{class:"day"}, el("h3",{text:k===todayKey()?"Today":fmtDate(k)}));
-      const by={};
-      days[k].sets.forEach(s=>{ const g=by[s.ex.toLowerCase()]||(by[s.ex.toLowerCase()]={ex:s.ex,n:0,top:0,reps:0}); g.n++; const w=conv(s.w,s.unit); if(w>g.top){g.top=w;g.reps=s.r;} });
-      Object.values(by).forEach(g=>card.append(el("p",{}, el("b",{text:g.ex}), document.createTextNode(`: ${g.n} ${g.n===1?"set":"sets"}, top ${nice(g.top)} ${unit} × ${g.reps}`))));
+      const groups=[];
+      days[k].sets.forEach(s=>{
+        let g=groups.find(g=>g.ex.toLowerCase()===s.ex.toLowerCase());
+        if(!g){ g={ex:s.ex,sets:[]}; groups.push(g); }
+        g.sets.push({w:conv(s.w,s.unit), r:s.r});
+      });
+      groups.forEach(g=>{
+        const top=g.sets.reduce((a,b)=> b.w>a.w || (b.w===a.w && b.r>a.r) ? b : a);
+        const ol=el("ol",{"aria-label":`${g.ex} sets in ${unit}`});
+        g.sets.forEach(s=>ol.append(el("li",{class:s===top&&g.sets.length>1?"top":"",text:`${nice(s.w)} × ${s.r}`})));
+        card.append(el("div",{class:"hx"},
+          el("div",{class:"hx-name"}, document.createTextNode(g.ex), el("small",{text:`${g.sets.length} ${g.sets.length===1?"set":"sets"}, weights in ${unit}`})),
+          ol));
+      });
       v.append(card);
     });
   }
@@ -346,14 +369,31 @@ td.big{font:600 1.2rem var(--display)}
     t.append(tb);
     v.append(el("div",{class:"tablewrap"},t), el("p",{class:"date",text:"Estimated 1-rep max uses the Epley formula: weight × (1 + reps ÷ 30). It’s a rough guide, not a target."}));
   }
+  function renderLastTime(){
+    const box=$("lastTime"), k=$("ex").value.trim().toLowerCase(), today=todayKey();
+    box.replaceChildren();
+    const key = k ? Object.keys(days).filter(d=>d<today && days[d].sets.some(s=>s.ex.toLowerCase()===k)).sort().pop() : null;
+    if(!key){ box.hidden=true; return; }
+    const sets=days[key].sets.filter(s=>s.ex.toLowerCase()===k);
+    const ol=el("ol",{});
+    sets.forEach(s=>{
+      const w=nice(conv(s.w,s.unit));
+      const b=el("button",{type:"button","aria-label":`Use ${w} ${unit} for ${s.r} reps`,text:`${w} × ${s.r}`});
+      b.onclick=()=>{ $("w").value=w; $("r").value=s.r; drawBar(parseFloat(w)); $("r").focus(); };
+      ol.append(el("li",{},b));
+    });
+    box.append(el("p",{}, el("b",{text:"Last time"}), document.createTextNode(`, ${fmtDate(key)} (${unit}). Tap a set to fill it in.`)), ol);
+    box.hidden=false;
+  }
   function renderAll(){
-    renderUnits(); renderDatalist(); renderToday(); renderHistory(); renderBests();
+    renderUnits(); renderDatalist(); renderToday(); renderHistory(); renderBests(); renderLastTime();
     drawBar(parseFloat($("w").value)||0);
   }
 
   /* ---------- events ---------- */
   $("today").textContent = fmtDate(todayKey());
   $("w").addEventListener("input", ()=>drawBar(parseFloat($("w").value)||0));
+  $("ex").addEventListener("input", renderLastTime);
   $("ex").addEventListener("change", ()=>{
     // prefill with the last weight used for this exercise
     const k=$("ex").value.trim().toLowerCase(); const prev=allSets().filter(s=>s.ex.toLowerCase()===k).pop();
@@ -361,6 +401,9 @@ td.big{font:600 1.2rem var(--display)}
   });
   function addSet(ex,w,r){
     const key=todayKey();
+    // reuse the spelling you used before, so "bench press" and "Bench press" stay one exercise
+    const known=[...allSets(), ...COMMON.map(n=>({ex:n}))].find(s=>s.ex.toLowerCase()===ex.toLowerCase());
+    if(known) ex=known.ex;
     if(!days[key]) days[key]={date:key,sets:[]};
     days[key].sets.push({id:uid(),ex,w,r,unit,t:Date.now()});
     persistDay(key); renderAll();
